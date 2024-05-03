@@ -40,7 +40,7 @@ async fn main() {
 async fn run_node_process(cancel: CancellationToken) {
     while !cancel.is_cancelled() {
         let result = tokio::process::Command::new("node")
-            .arg("index.js")
+            .arg("monitor/index.js")
             .output()
             .await;
         if let Ok(output) = result {

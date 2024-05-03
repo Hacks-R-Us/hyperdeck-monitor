@@ -27,6 +27,9 @@
         nativeBuildInputs = with pkgs; [
           rustToolchain
           nodejs
+          trunk
+          typos
+          trunk
         ];
         buildInputs = with pkgs; [
           rustToolchain
