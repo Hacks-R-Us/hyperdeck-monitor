@@ -1,35 +1,38 @@
 use std::{
+    collections::VecDeque,
     fmt::Display,
+    mem,
     net::{IpAddr, Ipv4Addr},
 };
 
-use egui::{Color32, RichText, Sense, Stroke, Vec2};
+use egui::{Button, Color32, RichText, Sense, Stroke, Vec2};
+use ewebsock::{Options, WsReceiver, WsSender};
 use wasm_timer::Instant;
 
-#[derive(serde::Deserialize, serde::Serialize)]
-#[serde(default)]
+use crate::websocket::{AddHyperdeckRequest, ClientRequest};
+
 pub struct HyperdeckMonitorApp {
-    #[serde(skip)]
     blink: bool,
-    #[serde(skip)]
     last_blink_change: Instant,
-    #[serde(skip)]
     new_hyperdeck_ip: String,
-
-    #[serde(skip)]
     new_hyperdeck_name: String,
-
-    #[serde(skip)]
+    new_hyperdeck_port: String,
     hyperdecks: Vec<Hyperdeck>,
+    websocket_message_queue: VecDeque<ClientRequest>,
+    ws_sender: WsSender,
+    ws_receiver: WsReceiver,
 }
 
 impl Default for HyperdeckMonitorApp {
     fn default() -> Self {
+        let (ws_sender, ws_receiver) =
+            ewebsock::connect("ws://127.0.0.1:9681/ws", Options::default()).unwrap();
         Self {
             blink: false,
             last_blink_change: Instant::now(),
             new_hyperdeck_ip: "".to_owned(),
             new_hyperdeck_name: "".to_owned(),
+            new_hyperdeck_port: 9993.to_string(),
             hyperdecks: vec![
                 Hyperdeck {
                     name: "Test Hyperdeck 1".to_string(),
@@ -52,27 +55,20 @@ impl Default for HyperdeckMonitorApp {
                     }],
                 },
             ],
+            websocket_message_queue: VecDeque::new(),
+            ws_sender,
+            ws_receiver,
         }
-    }
-}
-
-impl HyperdeckMonitorApp {
-    pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
-        // Load previous app state (if any)
-        if let Some(storage) = cc.storage {
-            return eframe::get_value(storage, eframe::APP_KEY).unwrap_or_default();
-        }
-
-        Default::default()
     }
 }
 
 impl eframe::App for HyperdeckMonitorApp {
-    fn save(&mut self, storage: &mut dyn eframe::Storage) {
-        eframe::set_value(storage, eframe::APP_KEY, self);
-    }
-
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        if let Some(message) = self.websocket_message_queue.pop_front() {
+            self.ws_sender.send(ewebsock::WsMessage::Text(
+                serde_json::to_string(&message).expect("Could not serialize message"),
+            ));
+        }
         egui::TopBottomPanel::top("top_panel").show(ctx, |ui| {
             egui::menu::bar(ui, |ui| {
                 egui::widgets::global_dark_light_mode_buttons(ui);
@@ -80,7 +76,13 @@ impl eframe::App for HyperdeckMonitorApp {
         });
 
         egui::CentralPanel::default().show(ctx, |ui| {
-            add_hyperdeck_panel(ui, &mut self.new_hyperdeck_ip, &mut self.new_hyperdeck_name);
+            add_hyperdeck_panel(
+                ui,
+                &mut self.new_hyperdeck_name,
+                &mut self.new_hyperdeck_ip,
+                &mut self.new_hyperdeck_port,
+                &mut self.websocket_message_queue,
+            );
             ui.separator();
 
             ui.vertical(|ui| {
@@ -105,8 +107,10 @@ impl eframe::App for HyperdeckMonitorApp {
 
 fn add_hyperdeck_panel(
     ui: &mut egui::Ui,
-    new_hyperdeck_ip: &mut String,
     new_hyperdeck_name: &mut String,
+    new_hyperdeck_ip: &mut String,
+    new_hyperdeck_port: &mut String,
+    message_queue: &mut VecDeque<ClientRequest>,
 ) {
     ui.heading("Add hyperdeck");
     ui.horizontal(|ui| {
@@ -114,8 +118,19 @@ fn add_hyperdeck_panel(
         ui.text_edit_singleline(new_hyperdeck_name);
         ui.label("IP");
         ui.text_edit_singleline(new_hyperdeck_ip);
-        if ui.button("Add").clicked() {
-            // Do Something
+        ui.label("Port");
+        ui.text_edit_singleline(new_hyperdeck_port);
+        let button_enabled = new_hyperdeck_ip.parse::<IpAddr>().is_ok()
+            && !new_hyperdeck_name.is_empty()
+            && new_hyperdeck_port.parse::<u16>().is_ok();
+        if ui.add_enabled(button_enabled, Button::new("Add")).clicked() {
+            message_queue.push_back(ClientRequest::AddHyperdeck(AddHyperdeckRequest {
+                name: mem::take(new_hyperdeck_name),
+                ip: mem::take(new_hyperdeck_ip),
+                port: mem::replace(new_hyperdeck_port, "9993".to_string())
+                    .parse::<u16>()
+                    .unwrap(),
+            }));
         }
     });
 }

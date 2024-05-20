@@ -1,3 +1,6 @@
+# Copied during build (🤮)
+src/websocket.rs
+
 # trunk output folder
 dist
 

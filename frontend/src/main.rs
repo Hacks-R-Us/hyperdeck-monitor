@@ -11,7 +11,7 @@ fn main() -> eframe::Result<()> {
     eframe::run_native(
         "eframe template",
         native_options,
-        Box::new(|cc| Box::new(hyperdeck_monitor_gui::HyperdeckMonitorApp::new(cc))),
+        Box::new(|_| Box::new(hyperdeck_monitor_gui::HyperdeckMonitorApp::default())),
     )
 }
 
@@ -26,7 +26,7 @@ fn main() {
             .start(
                 "the_canvas_id", // Where to draw to.
                 web_options,
-                Box::new(|cc| Box::new(hyperdeck_monitor_gui::HyperdeckMonitorApp::new(cc))),
+                Box::new(|_| Box::new(hyperdeck_monitor_gui::HyperdeckMonitorApp::default())),
             )
             .await
             .expect("failed to start eframe");
