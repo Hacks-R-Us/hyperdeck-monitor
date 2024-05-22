@@ -1,12 +1,24 @@
-[workspace]
-members = [
-    "monitor",
-    "frontend",
-]
-resolver = "2"
+[package]
+name = "hyperdeck-monitor"
+version = "0.1.0"
+edition = "2021"
 
-[profile.release]
-opt-level = 2
+default-run = "hyperdeck-monitor"
 
-[profile.dev.package."*"]
-opt-level = 2
+[dependencies]
+axum = { version = "0.6.10", features = ["macros", "ws"] }
+color-eyre = "0.6.3"
+futures = { version = "0.3.25" }
+futures-util = "0.3.30"
+serde = { version = "1.0.199", features = ["derive"] }
+serde_json = "1.0.116"
+tokio = { version = "1.37.0", features = ["full"] }
+tokio-stream = { version = "0.1.12", features = ["sync"] }
+tokio-tungstenite = "0.21.0"
+tokio-util = { version = "0.7.11", features = ["full"] }
+tower = { version = "0.4.13", features = ["full"] }
+tower-http = { version = "0.4.0", features = ["full"] }
+tracing = "0.1.40"
+tracing-subscriber = { version = "0.3.18", features = ["env-filter"] }
+url = "2.5.0"
+uuid = { version = "1.2.2", features = ["serde", "v4"] }

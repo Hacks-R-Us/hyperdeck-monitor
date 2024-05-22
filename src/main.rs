@@ -1,6 +1,9 @@
 use std::{process::Stdio, time::Duration};
 
-use api::message::{AddHyperdeckRequest, ClientRequest, HyperdeckMonitorState, HyperdeckState};
+use api::message::{
+    AddHyperdeckRequest, ClientRequest, HyperdeckConnectionState, HyperdeckMonitorState,
+    HyperdeckState, RemoveHyperdeckRequest,
+};
 use color_eyre::Report;
 use futures_util::{
     pin_mut, select,
@@ -71,15 +74,8 @@ async fn run(
     let mut state = HyperdeckMonitorState::default();
     let _ = state_tx.send(state.clone());
 
-    let mut ping_interval = tokio::time::interval(Duration::from_millis(500));
-    ping_interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
-
     while !cancel.is_cancelled() {
         let state_modified = select! {
-            _ = ping_interval.tick().fuse() => {
-                // TODO: Ping node, check it's still alive
-                false
-            },
             message_from_node = node_ws_message_rx.recv().fuse() => {
                 if let Some(msg) = message_from_node {
                     handle_message_from_node(msg, &mut node_commands_tx, &mut state).await
@@ -112,6 +108,18 @@ async fn handle_message_from_node(
             tracing::info!("[NODE] {message}");
             false
         }
+        NodeWsMessageReceived::HyperdeckConnected { id } => {
+            state.hyperdecks.entry(id).and_modify(|hyperdeck| {
+                hyperdeck.connection_state = HyperdeckConnectionState::Connected
+            });
+            true
+        }
+        NodeWsMessageReceived::HypderdeckDisconnected { id } => {
+            state.hyperdecks.entry(id).and_modify(|hyperdeck| {
+                hyperdeck.connection_state = HyperdeckConnectionState::Disconnected
+            });
+            true
+        }
     }
 }
 
@@ -130,12 +138,20 @@ async fn handle_message_from_client(
                     name,
                     ip: ip.clone(),
                     port,
+                    connection_state: api::message::HyperdeckConnectionState::Disconnected,
                 },
             );
             let _ = node_commands_tx.send(NodeWsCommand::AddHyperdeck(AddHyperdeckCommand {
                 id: id.to_string(),
                 ip,
                 port,
+            }));
+            true
+        }
+        ClientRequest::RemoveHyperdeck(RemoveHyperdeckRequest { id }) => {
+            let _ = state.hyperdecks.remove(&id);
+            let _ = node_commands_tx.send(NodeWsCommand::RemoveHyperdeck(RemoveHyperdeckCommand {
+                id,
             }));
             true
         }
@@ -148,7 +164,7 @@ async fn run_node_process(cancel: CancellationToken) {
         tokio::time::sleep(Duration::from_secs(1)).await;
 
         let result = tokio::process::Command::new("node")
-            .arg("monitor/index.js")
+            .arg("./index.js")
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
@@ -200,8 +216,6 @@ struct AppState {}
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(tag = "type")]
 enum NodeWsCommand {
-    #[serde(rename = "ping")]
-    Ping,
     #[serde(rename = "add_hyperdeck")]
     AddHyperdeck(AddHyperdeckCommand),
     #[serde(rename = "remove_hyperdeck")]
@@ -213,6 +227,8 @@ enum NodeWsCommand {
 #[serde(tag = "event")]
 enum NodeWsMessageReceived {
     Log { message: String },
+    HyperdeckConnected { id: String },
+    HypderdeckDisconnected { id: String },
 }
 
 #[derive(Debug, Serialize, Deserialize)]

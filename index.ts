@@ -10,7 +10,8 @@ interface WrappedHyperdeck {
 const hyperdecks: Map<string, WrappedHyperdeck> = new Map()
 
 enum WebSocketMessageType {
-  AddHyperdeck = "add_hyperdeck"
+  AddHyperdeck = "add_hyperdeck",
+  RemoveHyperdeck = "remove_hyperdeck"
 }
 
 type WebSocketMessage = {
@@ -18,6 +19,9 @@ type WebSocketMessage = {
   id: string,
   ip: string,
   port: number
+} | {
+  type: WebSocketMessageType.RemoveHyperdeck,
+  id: string
 }
 
 const wss = new WebSocket.Server({ port: 7867 });
@@ -58,11 +62,11 @@ function handle_message(message: Partial<WebSocketMessage>) {
 
       const newHyperdeck = new Hyperdeck()
 
-      // hyperdecks.set(message.id, {
-      //   ip: message.ip,
-      //   port: message.port,
-      //   hyperdeck: newHyperdeck
-      // });
+      hyperdecks.set(message.id, {
+        ip: message.ip,
+        port: message.port,
+        hyperdeck: newHyperdeck
+      });
 
       newHyperdeck.on('connected', (info) => {
         console.log(JSON.stringify(info))
@@ -85,7 +89,19 @@ function handle_message(message: Partial<WebSocketMessage>) {
       newHyperdeck.connect(message.ip, message.port)
 
       break;
+    case WebSocketMessageType.RemoveHyperdeck:
+      if (message.id === undefined) return;
+
+      console.log("Removing hyperdeck");
+
+      let hyperdeck = hyperdecks.get(message.id)
+      if (hyperdeck === undefined) return;
+
+      hyperdeck.hyperdeck.disconnect()
+      hyperdecks.delete(message.id)
+
+      break;
     default:
-      exhaustiveMatch(message.type)
+      exhaustiveMatch(message)
   }
 }

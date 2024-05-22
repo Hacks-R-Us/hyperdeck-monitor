@@ -9,7 +9,10 @@ use egui::{Button, Color32, RichText, Sense, Stroke, Vec2};
 use ewebsock::{Options, WsReceiver, WsSender};
 use wasm_timer::Instant;
 
-use crate::websocket::{AddHyperdeckRequest, ClientRequest};
+use crate::websocket::{
+    AddHyperdeckRequest, ClientRequest, HyperdeckConnectionState, RemoveHyperdeckRequest,
+    ServerEvent,
+};
 
 pub struct HyperdeckMonitorApp {
     blink: bool,
@@ -34,26 +37,28 @@ impl Default for HyperdeckMonitorApp {
             new_hyperdeck_name: "".to_owned(),
             new_hyperdeck_port: 9993.to_string(),
             hyperdecks: vec![
-                Hyperdeck {
-                    name: "Test Hyperdeck 1".to_string(),
-                    ip: IpAddr::V4(Ipv4Addr::new(192, 168, 10, 1)),
-                    status: HyperdeckStatus::Connected,
-                    recording_bays: vec![HyperdeckRecordBay {
-                        status: RecordingStatus::NotRecording,
-                        storage_capacity_mb: 500_000,
-                        recording_time_remaining: TimeRemaining(60),
-                    }],
-                },
-                Hyperdeck {
-                    name: "Test Hyperdeck 2".to_string(),
-                    ip: IpAddr::V4(Ipv4Addr::new(192, 168, 10, 2)),
-                    status: HyperdeckStatus::Disconnected,
-                    recording_bays: vec![HyperdeckRecordBay {
-                        status: RecordingStatus::NotRecording,
-                        storage_capacity_mb: 500_000,
-                        recording_time_remaining: TimeRemaining(3600 * 5), // 5 Hours
-                    }],
-                },
+                // Hyperdeck {
+                //     id: "test-1".to_string(),
+                //     name: "Test Hyperdeck 1".to_string(),
+                //     ip: IpAddr::V4(Ipv4Addr::new(192, 168, 10, 1)),
+                //     status: HyperdeckStatus::Connected,
+                //     recording_bays: vec![HyperdeckRecordBay {
+                //         status: RecordingStatus::NotRecording,
+                //         storage_capacity_mb: 500_000,
+                //         recording_time_remaining: TimeRemaining(60),
+                //     }],
+                // },
+                // Hyperdeck {
+                //     id: "test-2".to_string(),
+                //     name: "Test Hyperdeck 2".to_string(),
+                //     ip: IpAddr::V4(Ipv4Addr::new(192, 168, 10, 2)),
+                //     status: HyperdeckStatus::Disconnected,
+                //     recording_bays: vec![HyperdeckRecordBay {
+                //         status: RecordingStatus::NotRecording,
+                //         storage_capacity_mb: 500_000,
+                //         recording_time_remaining: TimeRemaining(3600 * 5), // 5 Hours
+                //     }],
+                // },
             ],
             websocket_message_queue: VecDeque::new(),
             ws_sender,
@@ -68,6 +73,26 @@ impl eframe::App for HyperdeckMonitorApp {
             self.ws_sender.send(ewebsock::WsMessage::Text(
                 serde_json::to_string(&message).expect("Could not serialize message"),
             ));
+        }
+        if let Some(ewebsock::WsEvent::Message(ewebsock::WsMessage::Text(event))) =
+            self.ws_receiver.try_recv()
+        {
+            if let Ok(received) = serde_json::from_str::<ServerEvent>(&event) {
+                match received {
+                    ServerEvent::HyperdeckMonitorState(state) => {
+                        self.hyperdecks = Default::default();
+                        for (id, hyperdeck) in state.hyperdecks {
+                            self.hyperdecks.push(Hyperdeck {
+                                id,
+                                name: hyperdeck.name,
+                                ip: hyperdeck.ip.parse().unwrap(),
+                                status: hyperdeck.connection_state.into(),
+                                recording_bays: vec![],
+                            })
+                        }
+                    }
+                }
+            }
         }
         egui::TopBottomPanel::top("top_panel").show(ctx, |ui| {
             egui::menu::bar(ui, |ui| {
@@ -86,7 +111,12 @@ impl eframe::App for HyperdeckMonitorApp {
             ui.separator();
 
             ui.vertical(|ui| {
-                hyperdeck_list(ui, &self.hyperdecks, self.blink);
+                hyperdeck_list(
+                    ui,
+                    &self.hyperdecks,
+                    self.blink,
+                    &mut self.websocket_message_queue,
+                );
             });
 
             ui.with_layout(egui::Layout::bottom_up(egui::Align::LEFT), |ui| {
@@ -135,7 +165,12 @@ fn add_hyperdeck_panel(
     });
 }
 
-fn hyperdeck_list(ui: &mut egui::Ui, hyperdecks: &[Hyperdeck], blink: bool) {
+fn hyperdeck_list(
+    ui: &mut egui::Ui,
+    hyperdecks: &[Hyperdeck],
+    blink: bool,
+    message_queue: &mut VecDeque<ClientRequest>,
+) {
     for hyperdeck in hyperdecks {
         ui.vertical(|ui| {
             ui.horizontal(|ui| {
@@ -152,6 +187,13 @@ fn hyperdeck_list(ui: &mut egui::Ui, hyperdecks: &[Hyperdeck], blink: bool) {
                 let hyperdeck_heading: RichText =
                     format!("{} [{}]", hyperdeck.name, hyperdeck.ip).into();
                 ui.heading(hyperdeck_heading.strong());
+                if ui.button("Remove").clicked() {
+                    message_queue.push_back(ClientRequest::RemoveHyperdeck(
+                        RemoveHyperdeckRequest {
+                            id: hyperdeck.id.clone(),
+                        },
+                    ));
+                }
             });
             if !hyperdeck.recording_bays.is_empty()
                 && matches!(hyperdeck.status, HyperdeckStatus::Connected)
@@ -195,6 +237,7 @@ fn connection_status(ui: &mut egui::Ui) {
 
 #[derive(serde::Deserialize, serde::Serialize)]
 struct Hyperdeck {
+    id: String,
     name: String,
     ip: IpAddr,
     status: HyperdeckStatus,
@@ -205,6 +248,15 @@ struct Hyperdeck {
 enum HyperdeckStatus {
     Connected,
     Disconnected,
+}
+
+impl From<HyperdeckConnectionState> for HyperdeckStatus {
+    fn from(value: HyperdeckConnectionState) -> Self {
+        match value {
+            HyperdeckConnectionState::Connected => HyperdeckStatus::Connected,
+            HyperdeckConnectionState::Disconnected => HyperdeckStatus::Disconnected,
+        }
+    }
 }
 
 #[derive(serde::Deserialize, serde::Serialize)]

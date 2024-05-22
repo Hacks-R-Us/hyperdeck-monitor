@@ -1,2 +1,4 @@
 .direnv
 target/
+index.js
+node_modules/

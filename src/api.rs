@@ -1,6 +1,7 @@
 use axum::extract::ws::Message;
 use axum::extract::{State, WebSocketUpgrade};
 use axum::response::Html;
+use axum::Json;
 use axum::{
     body::Bytes,
     extract::Path,
@@ -31,6 +32,12 @@ use uuid::Uuid;
 
 pub mod message;
 mod ws;
+
+const FILE_NAME_INDEX: &str = env!("FILE_NAME_INDEX");
+const FILE_NAME_WASM: &str = env!("FILE_NAME_WASM");
+const FILE_NAME_JS: &str = env!("FILE_NAME_JS");
+const FILE_NAME_MANIFEST: &str = env!("FILE_NAME_MANIFEST");
+const FILE_NAME_SERVICE_WORKER: &str = env!("FILE_NAME_SERVICE_WORKER");
 
 #[derive(Debug, Clone)]
 pub struct Client {
@@ -136,6 +143,14 @@ fn app(state: AppState) -> Router {
 
     Router::new()
         .route("/", get(get_index))
+        .route(&format!("/{}", FILE_NAME_INDEX), get(get_index))
+        .route(&format!("/{}", FILE_NAME_WASM), get(get_wasm))
+        .route(&format!("/{}", FILE_NAME_JS), get(get_js))
+        .route(&format!("/{}", FILE_NAME_MANIFEST), get(get_manifest))
+        .route(
+            &format!("/{}", FILE_NAME_SERVICE_WORKER),
+            get(get_service_worker),
+        )
         .route("/ws", get(upgrade_ws))
         .layer(middleware)
         .layer(cors)
@@ -146,7 +161,32 @@ fn app(state: AppState) -> Router {
 pub struct WebSocketUpgradeRequest {}
 
 async fn get_index() -> Html<String> {
-    Html(format!("Hello!"))
+    Html(include_str!(env!("INCLUDE_PATH_INDEX")).to_string())
+}
+
+async fn get_wasm() -> impl IntoResponse {
+    (
+        [(header::CONTENT_TYPE, "application/wasm")],
+        include_bytes!(env!("INCLUDE_PATH_WASM")),
+    )
+}
+
+async fn get_js() -> impl IntoResponse {
+    (
+        [(header::CONTENT_TYPE, "text/javascript")],
+        include_str!(env!("INCLUDE_PATH_JS")),
+    )
+}
+
+async fn get_manifest() -> Json<String> {
+    Json(include_str!(env!("INCLUDE_PATH_MANIFEST")).to_string())
+}
+
+async fn get_service_worker() -> impl IntoResponse {
+    (
+        [(header::CONTENT_TYPE, "text/javascript")],
+        include_str!(env!("INCLUDE_PATH_SERVICE_WORKER")),
+    )
 }
 
 #[axum::debug_handler]
@@ -157,7 +197,7 @@ async fn upgrade_ws(state: State<AppState>, ws: WebSocketUpgrade) -> impl IntoRe
         .clients
         .lock()
         .await
-        .insert(client_id.clone(), Client { sender: None });
+        .insert(client_id, Client { sender: None });
     let client = state.clients.lock().await.get(&client_id).cloned().unwrap();
     ws.on_upgrade(move |socket| {
         ws::client_connection(
