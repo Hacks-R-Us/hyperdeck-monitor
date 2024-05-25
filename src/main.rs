@@ -1,8 +1,8 @@
-use std::{process::Stdio, time::Duration};
+use std::{collections::HashMap, process::Stdio, time::Duration};
 
 use api::message::{
     AddHyperdeckRequest, ClientRequest, HyperdeckConnectionState, HyperdeckMonitorState,
-    HyperdeckState, RemoveHyperdeckRequest,
+    HyperdeckRecordBay, HyperdeckState, RecordingState, RemoveHyperdeckRequest,
 };
 use color_eyre::Report;
 use futures_util::{
@@ -31,9 +31,8 @@ async fn main() {
 
     let (node_ws_message_tx, node_ws_message_rx) = tokio::sync::mpsc::unbounded_channel();
     let (node_commands_tx, node_commands_rx) = tokio::sync::mpsc::unbounded_channel();
-    let state = AppState::default();
     let node_ws_communication =
-        talk_to_node_ws(state, node_ws_message_tx, node_commands_rx, cancel.clone()).fuse();
+        talk_to_node_ws(node_ws_message_tx, node_commands_rx, cancel.clone()).fuse();
 
     let (state_tx, state_rx) = tokio::sync::broadcast::channel(1);
     let (client_request_tx, client_request_rx) = tokio::sync::mpsc::unbounded_channel();
@@ -67,7 +66,7 @@ async fn main() {
 async fn run(
     mut node_commands_tx: tokio::sync::mpsc::UnboundedSender<NodeWsCommand>,
     mut node_ws_message_rx: tokio::sync::mpsc::UnboundedReceiver<NodeWsMessageReceived>,
-    mut state_tx: tokio::sync::broadcast::Sender<HyperdeckMonitorState>,
+    state_tx: tokio::sync::broadcast::Sender<HyperdeckMonitorState>,
     mut client_request_rx: tokio::sync::mpsc::UnboundedReceiver<ClientRequest>,
     cancel: CancellationToken,
 ) {
@@ -100,7 +99,7 @@ async fn run(
 
 async fn handle_message_from_node(
     msg: NodeWsMessageReceived,
-    node_commands_tx: &mut tokio::sync::mpsc::UnboundedSender<NodeWsCommand>,
+    _node_commands_tx: &mut tokio::sync::mpsc::UnboundedSender<NodeWsCommand>,
     state: &mut HyperdeckMonitorState,
 ) -> bool {
     match msg {
@@ -119,6 +118,38 @@ async fn handle_message_from_node(
                 hyperdeck.connection_state = HyperdeckConnectionState::Disconnected
             });
             true
+        }
+        NodeWsMessageReceived::RecordState {
+            hyperdeck_id,
+            status,
+        } => {
+            if let Some(hyperdeck) = state.hyperdecks.get_mut(&hyperdeck_id) {
+                hyperdeck.recording_status = if matches!(status, TransportStatus::Record) {
+                    RecordingState::Recording
+                } else {
+                    RecordingState::NotRecording
+                };
+                true
+            } else {
+                false
+            }
+        }
+        NodeWsMessageReceived::RecordTimeRemaining {
+            hyperdeck_id,
+            slot_id,
+            remaining,
+        } => {
+            if let Some(hyperdeck) = state.hyperdecks.get_mut(&hyperdeck_id) {
+                hyperdeck
+                    .slots
+                    .entry(slot_id)
+                    .or_insert(HyperdeckRecordBay {
+                        recording_time_remaining: remaining,
+                    });
+                true
+            } else {
+                false
+            }
         }
     }
 }
@@ -139,6 +170,8 @@ async fn handle_message_from_client(
                     ip: ip.clone(),
                     port,
                     connection_state: api::message::HyperdeckConnectionState::Disconnected,
+                    recording_status: api::message::RecordingState::NotRecording,
+                    slots: HashMap::new(),
                 },
             );
             let _ = node_commands_tx.send(NodeWsCommand::AddHyperdeck(AddHyperdeckCommand {
@@ -210,9 +243,6 @@ async fn run_node_process(cancel: CancellationToken) {
     }
 }
 
-#[derive(Default)]
-struct AppState {}
-
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(tag = "type")]
 enum NodeWsCommand {
@@ -223,12 +253,40 @@ enum NodeWsCommand {
 }
 
 #[derive(Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "snake_case")]
 #[serde(tag = "event")]
 enum NodeWsMessageReceived {
-    Log { message: String },
-    HyperdeckConnected { id: String },
-    HypderdeckDisconnected { id: String },
+    Log {
+        message: String,
+    },
+    HyperdeckConnected {
+        id: String,
+    },
+    HypderdeckDisconnected {
+        id: String,
+    },
+    RecordState {
+        hyperdeck_id: String,
+        status: TransportStatus,
+    },
+    RecordTimeRemaining {
+        hyperdeck_id: String,
+        slot_id: usize,
+        remaining: u64,
+    },
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+enum TransportStatus {
+    Preview,
+    Stopped,
+    Play,
+    Forward,
+    Rewind,
+    Jog,
+    Shuttle,
+    Record,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -246,7 +304,6 @@ struct RemoveHyperdeckCommand {
 }
 
 async fn talk_to_node_ws(
-    state: AppState,
     ws_message_tx: tokio::sync::mpsc::UnboundedSender<NodeWsMessageReceived>,
     commands_rx: tokio::sync::mpsc::UnboundedReceiver<NodeWsCommand>,
     cancel: CancellationToken,

@@ -44,6 +44,10 @@ fn main() {
         panic!("Running `trunk build` failed, reason {err}");
     }
 
+    if let Ok(trunk_output_string) = String::from_utf8(trunk_build_output.stdout) {
+        println!("{trunk_output_string}");
+    }
+
     let dist_paths = fs::read_dir("./frontend/dist").expect("Could not read dist directory");
     let paths: Vec<Result<DirEntry, Error>> = dist_paths.collect();
     let paths: Vec<(String, PathBuf)> = paths

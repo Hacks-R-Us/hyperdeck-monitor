@@ -32,7 +32,7 @@ pub async fn client_connection(
 
     let current_state = state.read().await.clone();
     let state_json =
-        serde_json::to_string(&ServerEvent::HyperdeckMonitorState(current_state.into())).unwrap();
+        serde_json::to_string(&ServerEvent::HyperdeckMonitorState(current_state)).unwrap();
     client_sender.send(Message::Text(state_json.clone())).ok();
 
     client.sender = Some(client_sender);

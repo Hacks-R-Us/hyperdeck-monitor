@@ -4,7 +4,6 @@ use axum::response::Html;
 use axum::Json;
 use axum::{
     body::Bytes,
-    extract::Path,
     http::{header, HeaderValue, Method},
     response::IntoResponse,
     routing::get,
@@ -66,7 +65,7 @@ pub async fn initialize_api(
 
                 let clients = state_clients.lock().await;
                 let state_json = serde_json::to_string(&ServerEvent::HyperdeckMonitorState(
-                    hyperdeck_monitor_state.into(),
+                    hyperdeck_monitor_state,
                 ))
                 .unwrap();
                 for (_, client) in clients.iter() {

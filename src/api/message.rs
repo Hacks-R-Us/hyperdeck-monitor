@@ -40,10 +40,25 @@ pub struct HyperdeckState {
     pub ip: String,
     pub port: u16,
     pub connection_state: HyperdeckConnectionState,
+    pub recording_status: RecordingState,
+    // HashMap to allow for sparse entries.
+    pub slots: HashMap<usize, HyperdeckRecordBay>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum HyperdeckConnectionState {
     Connected,
     Disconnected,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum RecordingState {
+    Recording,
+    NotRecording,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HyperdeckRecordBay {
+    /// Recording time available in seconds.
+    pub recording_time_remaining: u64,
 }

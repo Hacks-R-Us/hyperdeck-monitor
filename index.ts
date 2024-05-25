@@ -1,5 +1,6 @@
 import { Hyperdeck, Commands } from 'hyperdeck-connection';
 import WebSocket from 'ws';
+import { v4 as uuidv4 } from 'uuid';
 
 interface WrappedHyperdeck {
   ip: String,
@@ -26,8 +27,11 @@ type WebSocketMessage = {
 
 const wss = new WebSocket.Server({ port: 7867 });
 
-wss.on('connection', function connection(ws) {
-  ws.on('message', function message(data) {
+const connected_clients: Map<string, WebSocket> = new Map();
+
+wss.on('connection', (ws) => {
+  const clientId = uuidv4();
+  ws.on('message', (data) => {
     try {
       const message = JSON.parse(data.toString()) as Partial<WebSocketMessage>;
       handle_message(message)
@@ -35,11 +39,16 @@ wss.on('connection', function connection(ws) {
       return;
     }
   });
+  ws.on('close', () => {
+    connected_clients.delete(clientId)
+  })
 
   ws.send(JSON.stringify({
     event: "log",
     message: "Hello"
   }));
+
+  connected_clients.set(clientId, ws);
 });
 
 function exhaustiveMatch(_never: never) {
@@ -68,22 +77,62 @@ function handle_message(message: Partial<WebSocketMessage>) {
         hyperdeck: newHyperdeck
       });
 
-      newHyperdeck.on('connected', (info) => {
-        console.log(JSON.stringify(info))
+      newHyperdeck.on('connected', (_info) => {
+        notifyClients({
+          event: "hyperdeck_connected",
+          id: message.id
+        })
       
-        newHyperdeck.sendCommand(new Commands.TransportInfoCommand()).then((transportInfo) => {
-          console.log(JSON.stringify(transportInfo))
+        setInterval(() => {
+          newHyperdeck.sendCommand(new Commands.TransportInfoCommand()).then((transportInfo) => {
+            notifyClients({
+              event: "record_state",
+              hyperdeckId: message.id,
+              state: transportInfo.status,
+            })
+          })
+        })
+
+        newHyperdeck.sendCommand(new Commands.DeviceInfoCommand()).then((info) => {
+          for (let index = 0; index < info.slots; index++) {
+            setInterval(() => {
+              newHyperdeck.sendCommand(new Commands.SlotInfoCommand(index)).then((slot) => {
+                notifyClients({
+                  event: "record_time_remaining",
+                  hyperdeckId: message.id,
+                  slotId: slot.slotId,
+                  remaining: slot.recordingTime
+                })
+              })
+            })
+          }
         })
       })
       
-      newHyperdeck.on('notify.slot', function (state) {
-        console.log(JSON.stringify(state)) // catch the slot state change.
+      newHyperdeck.on('notify.slot', function (slot) {
+        notifyClients({
+          event: "record_time_remaining",
+          hyperdeckId: message.id,
+          slotId: slot.slotId,
+          remaining: slot.recordingTime
+        })
       })
       newHyperdeck.on('notify.transport', function (state) {
-        console.log(JSON.stringify(state)) // catch the transport state change.
+        notifyClients({
+          event: "record_state",
+          hyperdeckId: message.id,
+          state: state.status
+        })
       })
       newHyperdeck.on('error', (err) => {
         console.log('Hyperdeck error', JSON.stringify(err))
+      })
+
+      newHyperdeck.on('disconnected', () => {
+        notifyClients({
+          event: "hyperdeck_disconnected",
+          id: message.id
+        })
       })
 
       newHyperdeck.connect(message.ip, message.port)
@@ -104,4 +153,10 @@ function handle_message(message: Partial<WebSocketMessage>) {
     default:
       exhaustiveMatch(message)
   }
+}
+
+function notifyClients(message: object) {
+  connected_clients.forEach((client) => {
+    client.send(JSON.stringify(message))
+  })
 }

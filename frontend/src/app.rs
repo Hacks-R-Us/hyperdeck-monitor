@@ -1,17 +1,16 @@
 use std::{
-    collections::VecDeque,
-    fmt::Display,
+    collections::{HashMap, VecDeque},
     mem,
     net::{IpAddr, Ipv4Addr},
 };
 
-use egui::{Button, Color32, RichText, Sense, Stroke, Vec2};
+use egui::{Button, Color32, RichText, Rounding, Sense, Stroke, Vec2};
 use ewebsock::{Options, WsReceiver, WsSender};
 use wasm_timer::Instant;
 
 use crate::websocket::{
-    AddHyperdeckRequest, ClientRequest, HyperdeckConnectionState, RemoveHyperdeckRequest,
-    ServerEvent,
+    AddHyperdeckRequest, ClientRequest, HyperdeckConnectionState, HyperdeckRecordBay,
+    RecordingState, RemoveHyperdeckRequest, ServerEvent,
 };
 
 pub struct HyperdeckMonitorApp {
@@ -37,28 +36,69 @@ impl Default for HyperdeckMonitorApp {
             new_hyperdeck_name: "".to_owned(),
             new_hyperdeck_port: 9993.to_string(),
             hyperdecks: vec![
-                // Hyperdeck {
-                //     id: "test-1".to_string(),
-                //     name: "Test Hyperdeck 1".to_string(),
-                //     ip: IpAddr::V4(Ipv4Addr::new(192, 168, 10, 1)),
-                //     status: HyperdeckStatus::Connected,
-                //     recording_bays: vec![HyperdeckRecordBay {
-                //         status: RecordingStatus::NotRecording,
-                //         storage_capacity_mb: 500_000,
-                //         recording_time_remaining: TimeRemaining(60),
-                //     }],
-                // },
-                // Hyperdeck {
-                //     id: "test-2".to_string(),
-                //     name: "Test Hyperdeck 2".to_string(),
-                //     ip: IpAddr::V4(Ipv4Addr::new(192, 168, 10, 2)),
-                //     status: HyperdeckStatus::Disconnected,
-                //     recording_bays: vec![HyperdeckRecordBay {
-                //         status: RecordingStatus::NotRecording,
-                //         storage_capacity_mb: 500_000,
-                //         recording_time_remaining: TimeRemaining(3600 * 5), // 5 Hours
-                //     }],
-                // },
+                Hyperdeck {
+                    id: "test-1".to_string(),
+                    name: "Description: Connected Hyperdeck - Not Recording - Not Much Time"
+                        .to_string(),
+                    ip: IpAddr::V4(Ipv4Addr::new(192, 168, 10, 1)),
+                    status: HyperdeckStatus::Connected,
+                    recording_status: RecordingState::NotRecording,
+                    slots: vec![(
+                        0usize,
+                        HyperdeckRecordBay {
+                            recording_time_remaining: 60,
+                        },
+                    )]
+                    .into_iter()
+                    .collect::<HashMap<usize, HyperdeckRecordBay>>(),
+                },
+                Hyperdeck {
+                    id: "test-2".to_string(),
+                    name: "Description: Connected Hyperdeck - Recording - Not Much Time"
+                        .to_string(),
+                    ip: IpAddr::V4(Ipv4Addr::new(192, 168, 10, 2)),
+                    status: HyperdeckStatus::Connected,
+                    recording_status: RecordingState::Recording,
+                    slots: vec![(
+                        0usize,
+                        HyperdeckRecordBay {
+                            recording_time_remaining: 60,
+                        },
+                    )]
+                    .into_iter()
+                    .collect::<HashMap<usize, HyperdeckRecordBay>>(),
+                },
+                Hyperdeck {
+                    id: "test-3".to_string(),
+                    name: "Description: Connected Hyperdeck - Recording - Plenty of Time"
+                        .to_string(),
+                    ip: IpAddr::V4(Ipv4Addr::new(192, 168, 10, 3)),
+                    status: HyperdeckStatus::Connected,
+                    recording_status: RecordingState::Recording,
+                    slots: vec![(
+                        0usize,
+                        HyperdeckRecordBay {
+                            recording_time_remaining: 60 * 30,
+                        },
+                    )]
+                    .into_iter()
+                    .collect::<HashMap<usize, HyperdeckRecordBay>>(),
+                },
+                Hyperdeck {
+                    id: "test-4".to_string(),
+                    name: "Description: Disconnected Hyperdeck".to_string(),
+                    ip: IpAddr::V4(Ipv4Addr::new(192, 168, 10, 4)),
+                    status: HyperdeckStatus::Disconnected,
+                    recording_status: RecordingState::NotRecording,
+                    slots: vec![(
+                        0usize,
+                        HyperdeckRecordBay {
+                            recording_time_remaining: 3600 * 5, // 5 Hours
+                        },
+                    )]
+                    .into_iter()
+                    .collect::<HashMap<usize, HyperdeckRecordBay>>(),
+                },
             ],
             websocket_message_queue: VecDeque::new(),
             ws_sender,
@@ -87,18 +127,14 @@ impl eframe::App for HyperdeckMonitorApp {
                                 name: hyperdeck.name,
                                 ip: hyperdeck.ip.parse().unwrap(),
                                 status: hyperdeck.connection_state.into(),
-                                recording_bays: vec![],
+                                recording_status: hyperdeck.recording_status,
+                                slots: hyperdeck.slots,
                             })
                         }
                     }
                 }
             }
         }
-        egui::TopBottomPanel::top("top_panel").show(ctx, |ui| {
-            egui::menu::bar(ui, |ui| {
-                egui::widgets::global_dark_light_mode_buttons(ui);
-            });
-        });
 
         egui::CentralPanel::default().show(ctx, |ui| {
             add_hyperdeck_panel(
@@ -117,11 +153,6 @@ impl eframe::App for HyperdeckMonitorApp {
                     self.blink,
                     &mut self.websocket_message_queue,
                 );
-            });
-
-            ui.with_layout(egui::Layout::bottom_up(egui::Align::LEFT), |ui| {
-                connection_status(ui);
-                egui::warn_if_debug_build(ui);
             });
         });
 
@@ -195,27 +226,41 @@ fn hyperdeck_list(
                     ));
                 }
             });
-            if !hyperdeck.recording_bays.is_empty()
-                && matches!(hyperdeck.status, HyperdeckStatus::Connected)
-            {
-                let recording_bays_text: RichText = "Recording Bays".into();
-                ui.label(recording_bays_text.size(16.0).strong());
-                for (index, bay) in hyperdeck.recording_bays.iter().enumerate() {
-                    ui.horizontal(|ui| {
-                        let bay_label: RichText = format!("Bay {}", index + 1).into();
-                        ui.label(bay_label.strong());
-                        match bay.status {
-                            RecordingStatus::Recording => ui.label("Recording"),
-                            RecordingStatus::NotRecording => ui.label("Not Recording"),
-                        };
-                        ui.label(format!(
-                            "Total Storage Capacity: {}GB",
-                            bay.storage_capacity_mb / 1000,
-                        ));
-                        let time_remaining_text: RichText =
-                            format!("Time remaining: {}", bay.recording_time_remaining).into();
+            if matches!(hyperdeck.status, HyperdeckStatus::Connected) {
+                ui.horizontal(|ui| {
+                    match hyperdeck.recording_status {
+                        RecordingState::Recording => {
+                            let (response, painter) =
+                                ui.allocate_painter(Vec2 { x: 16.0, y: 16.0 }, Sense::hover());
+                            let rect = response.rect;
+                            painter.rect(
+                                rect,
+                                Rounding::ZERO,
+                                Color32::from_rgb(255, 255, 255),
+                                Stroke::NONE,
+                            );
+                            let recording_text: RichText = "[Recording]".into();
+                            ui.label(
+                                recording_text
+                                    .color(Color32::from_rgb(255, 255, 255))
+                                    .strong(),
+                            );
+                        }
+                        RecordingState::NotRecording => {
+                            ui.label("[Not Recording]");
+                        }
+                    };
+                });
 
-                        if bay.recording_time_remaining.0 > 15 * 60 || !blink {
+                for (index, slot) in hyperdeck.slots.iter() {
+                    ui.horizontal(|ui| {
+                        let slot_label: RichText = format!("Slot {}", index + 1).into();
+                        ui.label(slot_label.strong());
+
+                        let time_remaining_text: RichText =
+                            format!("Time remaining: {}", slot.recording_time_remaining).into();
+
+                        if slot.recording_time_remaining > 15 * 60 || !blink {
                             ui.label(time_remaining_text);
                         } else {
                             ui.label(time_remaining_text.color(Color32::RED));
@@ -228,20 +273,14 @@ fn hyperdeck_list(
     }
 }
 
-fn connection_status(ui: &mut egui::Ui) {
-    ui.horizontal(|ui| {
-        // TODO: Make it real
-        ui.label("Connected");
-    });
-}
-
 #[derive(serde::Deserialize, serde::Serialize)]
 struct Hyperdeck {
     id: String,
     name: String,
     ip: IpAddr,
     status: HyperdeckStatus,
-    recording_bays: Vec<HyperdeckRecordBay>,
+    recording_status: RecordingState,
+    slots: HashMap<usize, HyperdeckRecordBay>,
 }
 
 #[derive(serde::Deserialize, serde::Serialize)]
@@ -257,29 +296,4 @@ impl From<HyperdeckConnectionState> for HyperdeckStatus {
             HyperdeckConnectionState::Disconnected => HyperdeckStatus::Disconnected,
         }
     }
-}
-
-#[derive(serde::Deserialize, serde::Serialize)]
-struct HyperdeckRecordBay {
-    status: RecordingStatus,
-    /// Storage capacity in MB.
-    storage_capacity_mb: u64,
-    /// Recording time available in seconds.
-    recording_time_remaining: TimeRemaining,
-}
-
-#[derive(serde::Deserialize, serde::Serialize)]
-struct TimeRemaining(u64);
-
-impl Display for TimeRemaining {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let time = hrtime::from_sec_padded(self.0);
-        write!(f, "{time}")
-    }
-}
-
-#[derive(serde::Deserialize, serde::Serialize)]
-enum RecordingStatus {
-    Recording,
-    NotRecording,
 }
