@@ -1410,6 +1410,7 @@ dependencies = [
  "env_logger",
  "ewebsock",
  "hrtime",
+ "js-sys",
  "log",
  "serde",
  "serde_json",
