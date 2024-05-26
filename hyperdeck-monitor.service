@@ -1,0 +1,10 @@
+[Unit]
+Description=reports status of hyperdecks on the network via a web UI
+After=network.target
+
+[Service]
+Type=exec
+Restart=always
+RestartSec=30
+WorkingDirectory=/opt/hyperdeck-monitor
+ExecStart=/opt/hyperdeck-monitor/target/release/hyperdeck-monitor
