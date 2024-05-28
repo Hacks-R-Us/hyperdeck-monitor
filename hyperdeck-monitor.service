@@ -8,3 +8,6 @@ Restart=always
 RestartSec=30
 WorkingDirectory=/opt/hyperdeck-monitor
 ExecStart=/opt/hyperdeck-monitor/target/release/hyperdeck-monitor
+
+[Install]
+WantedBy=multi-user.target
