@@ -6,7 +6,6 @@ use std::{
 
 use egui::{Button, Color32, RichText, Rounding, Sense, Stroke, Vec2};
 use ewebsock::{Options, WsReceiver, WsSender};
-use js_sys::eval;
 use wasm_timer::Instant;
 
 use crate::websocket::{
@@ -28,7 +27,7 @@ pub struct HyperdeckMonitorApp {
 
 impl Default for HyperdeckMonitorApp {
     fn default() -> Self {
-        let api_websocket_location = format!("ws://voc.emf.camp:9681/ws", window_location);
+        let api_websocket_location = format!("ws://voc.emf.camp:9681/ws");
         let (ws_sender, ws_receiver) =
             ewebsock::connect(api_websocket_location, Options::default()).unwrap();
         Self {
