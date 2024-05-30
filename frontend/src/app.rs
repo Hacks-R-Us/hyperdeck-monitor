@@ -27,9 +27,8 @@ pub struct HyperdeckMonitorApp {
 
 impl Default for HyperdeckMonitorApp {
     fn default() -> Self {
-        let api_websocket_location = format!("ws://voc.emf.camp:9681/ws");
         let (ws_sender, ws_receiver) =
-            ewebsock::connect(api_websocket_location, Options::default()).unwrap();
+            ewebsock::connect("ws://voc.emf.camp:9681/ws", Options::default()).unwrap();
         Self {
             blink: false,
             last_blink_change: Instant::now(),
