@@ -102,6 +102,7 @@ async fn handle_message_from_node(
     _node_commands_tx: &mut tokio::sync::mpsc::UnboundedSender<NodeWsCommand>,
     state: &mut HyperdeckMonitorState,
 ) -> bool {
+    tracing::info!("{:?}", msg);
     match msg {
         NodeWsMessageReceived::Log { message } => {
             tracing::info!("[NODE] {message}");
@@ -253,7 +254,7 @@ enum NodeWsCommand {
     RemoveHyperdeck(RemoveHyperdeckCommand),
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 #[serde(tag = "event")]
 enum NodeWsMessageReceived {
@@ -277,7 +278,7 @@ enum NodeWsMessageReceived {
     },
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 enum TransportStatus {
     Preview,

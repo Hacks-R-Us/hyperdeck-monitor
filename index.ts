@@ -91,7 +91,11 @@ function handle_message(message: Partial<WebSocketMessage>) {
               status: transportInfo.status,
             })
           }).catch((err) => {
-            console.log(err)
+            console.log(JSON.stringify(err))
+            notifyClients({
+              event: "log",
+              message: JSON.stringify(err)
+            })
           })
         }, 1000)
 
@@ -107,7 +111,11 @@ function handle_message(message: Partial<WebSocketMessage>) {
                     remaining: slot.recordingTime
                   })
                 }).catch((err) => {
-                  console.log(err)
+                  console.log(JSON.stringify(err))
+                  notifyClients({
+                    event: "log",
+                    message: JSON.stringify(err)
+                  })
                 })
               }, 1000)
             }
@@ -132,6 +140,10 @@ function handle_message(message: Partial<WebSocketMessage>) {
       })
       newHyperdeck.on('error', (err) => {
         console.log('Hyperdeck error', JSON.stringify(err))
+        notifyClients({
+          event: "log",
+          message: JSON.stringify(err)
+        })
       })
 
       newHyperdeck.on('disconnected', () => {
