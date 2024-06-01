@@ -129,7 +129,8 @@ impl eframe::App for HyperdeckMonitorApp {
                                 status: hyperdeck.connection_state.into(),
                                 recording_status: hyperdeck.recording_status,
                                 slots: hyperdeck.slots,
-                            })
+                            });
+                            self.hyperdecks.sort_by(|a, b| a.name.cmp(&b.name));
                         }
                     }
                 }
