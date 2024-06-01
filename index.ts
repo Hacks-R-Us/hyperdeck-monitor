@@ -103,7 +103,7 @@ function handle_message(message: Partial<WebSocketMessage>) {
           newHyperdeck.sendCommand(new Commands.DeviceInfoCommand()).then((info) => {
             notifyClients({
               event: "log",
-              message: JSON.stringify(info)
+              message: "DEVICE INFO " + JSON.stringify(info)
             })
             let slots = info.slots === null ? 1 : info.slots;
             for (let index = 0; index < slots; index++) {
@@ -111,7 +111,7 @@ function handle_message(message: Partial<WebSocketMessage>) {
                 newHyperdeck.sendCommand(new Commands.SlotInfoCommand(index)).then((slot) => {
                   notifyClients({
                     event: "log",
-                    message: JSON.stringify(slot)
+                    message: "SLOT " + JSON.stringify(slot)
                   })
                   notifyClients({
                     event: "record_time_remaining",
@@ -123,7 +123,7 @@ function handle_message(message: Partial<WebSocketMessage>) {
                   console.log(JSON.stringify(err))
                   notifyClients({
                     event: "log",
-                    message: JSON.stringify(err)
+                    message: "ERR " + JSON.stringify(err)
                   })
                 })
               }, 1000)
@@ -133,7 +133,7 @@ function handle_message(message: Partial<WebSocketMessage>) {
             console.log(JSON.stringify(err))
             notifyClients({
               event: "log",
-              message: JSON.stringify(err)
+              message: "ERR " + JSON.stringify(err)
             })
           })
         }, 1000)
