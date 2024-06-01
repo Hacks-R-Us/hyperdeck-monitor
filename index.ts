@@ -101,6 +101,10 @@ function handle_message(message: Partial<WebSocketMessage>) {
 
         setTimeout(() => {
           newHyperdeck.sendCommand(new Commands.DeviceInfoCommand()).then((info) => {
+            notifyClients({
+              event: "log",
+              message: JSON.stringify(info)
+            })
             for (let index = 0; index < info.slots; index++) {
               setInterval(() => {
                 newHyperdeck.sendCommand(new Commands.SlotInfoCommand(index)).then((slot) => {
