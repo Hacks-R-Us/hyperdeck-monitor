@@ -87,10 +87,12 @@ function handle_message(message: Partial<WebSocketMessage>) {
           newHyperdeck.sendCommand(new Commands.TransportInfoCommand()).then((transportInfo) => {
             notifyClients({
               event: "record_state",
-              hyperdeckId: message.id,
-              state: transportInfo.status,
+              hyperdeck_id: message.id,
+              status: transportInfo.status,
             })
-          }).catch(() => {})
+          }).catch((err) => {
+            console.log()
+          })
         }, 1000)
 
         newHyperdeck.sendCommand(new Commands.DeviceInfoCommand()).then((info) => {
@@ -99,8 +101,8 @@ function handle_message(message: Partial<WebSocketMessage>) {
               newHyperdeck.sendCommand(new Commands.SlotInfoCommand(index)).then((slot) => {
                 notifyClients({
                   event: "record_time_remaining",
-                  hyperdeckId: message.id,
-                  slotId: slot.slotId,
+                  hyperdeck_id: message.id,
+                  slot_id: slot.slotId,
                   remaining: slot.recordingTime
                 })
               }).catch(() => {})
@@ -112,16 +114,16 @@ function handle_message(message: Partial<WebSocketMessage>) {
       newHyperdeck.on('notify.slot', function (slot) {
         notifyClients({
           event: "record_time_remaining",
-          hyperdeckId: message.id,
-          slotId: slot.slotId,
+          hyperdeck_id: message.id,
+          slot_id: slot.slotId,
           remaining: slot.recordingTime
         })
       })
       newHyperdeck.on('notify.transport', function (state) {
         notifyClients({
           event: "record_state",
-          hyperdeckId: message.id,
-          state: state.status
+          hyperdeck_id: message.id,
+          status: state.status
         })
       })
       newHyperdeck.on('error', (err) => {
