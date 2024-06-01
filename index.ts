@@ -120,6 +120,13 @@ function handle_message(message: Partial<WebSocketMessage>) {
               }, 1000)
             }
           })
+          .catch((err) => {
+            console.log(JSON.stringify(err))
+            notifyClients({
+              event: "log",
+              message: JSON.stringify(err)
+            })
+          })
         }, 1000)
       })
       
