@@ -105,9 +105,14 @@ function handle_message(message: Partial<WebSocketMessage>) {
               event: "log",
               message: JSON.stringify(info)
             })
-            for (let index = 0; index < info.slots ?? 1; index++) {
+            let slots = info.slots === null ? 1 : info.slots;
+            for (let index = 0; index < slots; index++) {
               setInterval(() => {
                 newHyperdeck.sendCommand(new Commands.SlotInfoCommand(index)).then((slot) => {
+                  notifyClients({
+                    event: "log",
+                    message: JSON.stringify(slot)
+                  })
                   notifyClients({
                     event: "record_time_remaining",
                     hyperdeck_id: message.id,
