@@ -91,24 +91,28 @@ function handle_message(message: Partial<WebSocketMessage>) {
               status: transportInfo.status,
             })
           }).catch((err) => {
-            console.log()
+            console.log(err)
           })
         }, 1000)
 
-        newHyperdeck.sendCommand(new Commands.DeviceInfoCommand()).then((info) => {
-          for (let index = 0; index < info.slots; index++) {
-            setInterval(() => {
-              newHyperdeck.sendCommand(new Commands.SlotInfoCommand(index)).then((slot) => {
-                notifyClients({
-                  event: "record_time_remaining",
-                  hyperdeck_id: message.id,
-                  slot_id: slot.slotId,
-                  remaining: slot.recordingTime
+        setTimeout(() => {
+          newHyperdeck.sendCommand(new Commands.DeviceInfoCommand()).then((info) => {
+            for (let index = 0; index < info.slots; index++) {
+              setInterval(() => {
+                newHyperdeck.sendCommand(new Commands.SlotInfoCommand(index)).then((slot) => {
+                  notifyClients({
+                    event: "record_time_remaining",
+                    hyperdeck_id: message.id,
+                    slot_id: slot.slotId,
+                    remaining: slot.recordingTime
+                  })
+                }).catch((err) => {
+                  console.log(err)
                 })
-              }).catch(() => {})
-            }, 1000)
-          }
-        })
+              }, 1000)
+            }
+          })
+        }, 1000)
       })
       
       newHyperdeck.on('notify.slot', function (slot) {
