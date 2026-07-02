@@ -3,6 +3,8 @@
         "index.ts"
     ],
     "compilerOptions": {
-        "esModuleInterop": true
+        "esModuleInterop": true,
+        "moduleResolution": "bundler",
+        "module": "esnext"
     },
 }

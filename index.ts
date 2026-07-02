@@ -1,5 +1,5 @@
 import { Hyperdeck, Commands } from 'hyperdeck-connection';
-import WebSocket from 'ws';
+import WebSocket, { WebSocketServer } from 'ws';
 import { v4 as uuidv4 } from 'uuid';
 
 interface WrappedHyperdeck {
@@ -25,7 +25,7 @@ type WebSocketMessage = {
   id: string
 }
 
-const wss = new WebSocket.Server({ port: 7867 });
+const wss = new WebSocketServer({ port: 7867 });
 
 const connected_clients: Map<string, WebSocket> = new Map();
 
@@ -57,9 +57,10 @@ function exhaustiveMatch(_never: never) {
 
 function handle_message(message: Partial<WebSocketMessage>) {
   console.log(JSON.stringify(message));
-  if (message.type === undefined) return;
+  const messageType = message.type;
+  if (messageType === undefined) return;
 
-  switch (message.type) {
+  switch (messageType) {
     case WebSocketMessageType.AddHyperdeck:
       if (message.id === undefined) return;
       if (message.ip === undefined) return;
@@ -185,7 +186,7 @@ function handle_message(message: Partial<WebSocketMessage>) {
 
       break;
     default:
-      exhaustiveMatch(message)
+      exhaustiveMatch(messageType)
   }
 }
 
