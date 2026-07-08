@@ -1,6 +1,7 @@
 use std::{
     collections::HashMap,
     net::{Ipv4Addr, SocketAddr, SocketAddrV4},
+    path::PathBuf,
     process::Stdio,
     sync::Arc,
     time::Duration,
@@ -10,6 +11,7 @@ use api::message::{
     AddHyperdeckRequest, ClientRequest, HyperdeckConnectionState, HyperdeckMonitorState,
     HyperdeckRecordBay, HyperdeckState, RecordingState, RemoveHyperdeckRequest,
 };
+use clap::Parser;
 use color_eyre::Report;
 use futures_util::{
     pin_mut, select,
@@ -25,12 +27,28 @@ use tokio_util::{
 };
 use tracing_subscriber::EnvFilter;
 
+use crate::storage::{load_hyperdecks_file, write_hyperdecks_to_file, StoredHyperdeck};
+
 mod api;
+mod storage;
+
+#[derive(Parser)]
+struct Args {
+    #[clap(long)]
+    hyperdecks_file: Option<PathBuf>,
+}
 
 #[tokio::main]
 async fn main() {
     setup_logging().expect("Failed to setup logging");
     tracing::info!("Hello, world!");
+
+    let args = Args::parse();
+
+    let hyperdecks = match &args.hyperdecks_file {
+        Some(hyperdecks_file_path) => load_hyperdecks_file(hyperdecks_file_path).await,
+        None => vec![],
+    };
 
     let api_port: u16 = std::env::var("API_PORT")
         .unwrap_or("9681".to_string())
@@ -67,6 +85,13 @@ async fn main() {
 
     let (state_tx, state_rx) = tokio::sync::broadcast::channel(1);
     let (client_request_tx, client_request_rx) = tokio::sync::mpsc::unbounded_channel();
+    for hyperdeck in hyperdecks {
+        let _ = client_request_tx.send(ClientRequest::AddHyperdeck(AddHyperdeckRequest {
+            name: hyperdeck.name,
+            ip: hyperdeck.ip,
+            port: hyperdeck.port,
+        }));
+    }
     let api = api::initialize_api(api_port, state_rx, client_request_tx).fuse();
 
     let hyperdeck_monitor = run(
@@ -74,6 +99,7 @@ async fn main() {
         node_ws_message_rx,
         state_tx,
         client_request_rx,
+        args.hyperdecks_file.as_deref(),
         cancel.clone(),
     )
     .fuse();
@@ -99,6 +125,7 @@ async fn run(
     mut node_ws_message_rx: tokio::sync::mpsc::UnboundedReceiver<NodeWsMessageReceived>,
     state_tx: tokio::sync::broadcast::Sender<HyperdeckMonitorState>,
     mut client_request_rx: tokio::sync::mpsc::UnboundedReceiver<ClientRequest>,
+    hyperdecks_file_path: Option<&std::path::Path>,
     cancel: CancellationToken,
 ) {
     let mut state = HyperdeckMonitorState::default();
@@ -115,7 +142,7 @@ async fn run(
             },
             message_from_client = client_request_rx.recv().fuse() => {
                 if let Some(msg) = message_from_client {
-                    handle_message_from_client(msg, &mut node_commands_tx, &mut state).await
+                    handle_message_from_client(msg, &mut node_commands_tx, &mut state, hyperdecks_file_path).await
                 } else {
                     false
                 }
@@ -191,6 +218,7 @@ async fn handle_message_from_client(
     msg: ClientRequest,
     node_commands_tx: &mut tokio::sync::mpsc::UnboundedSender<NodeWsCommand>,
     state: &mut HyperdeckMonitorState,
+    hyperdecks_file_path: Option<&std::path::Path>,
 ) -> bool {
     match msg {
         ClientRequest::AddHyperdeck(AddHyperdeckRequest { name, ip, port }) => {
@@ -212,6 +240,19 @@ async fn handle_message_from_client(
                 ip,
                 port,
             }));
+
+            if let Some(path) = hyperdecks_file_path {
+                write_hyperdecks_to_file(
+                    path,
+                    state
+                        .hyperdecks
+                        .clone()
+                        .into_values()
+                        .map(Into::<StoredHyperdeck>::into)
+                        .collect(),
+                )
+                .await;
+            }
             true
         }
         ClientRequest::RemoveHyperdeck(RemoveHyperdeckRequest { id }) => {
@@ -219,6 +260,18 @@ async fn handle_message_from_client(
             let _ = node_commands_tx.send(NodeWsCommand::RemoveHyperdeck(RemoveHyperdeckCommand {
                 id,
             }));
+            if let Some(path) = hyperdecks_file_path {
+                write_hyperdecks_to_file(
+                    path,
+                    state
+                        .hyperdecks
+                        .clone()
+                        .into_values()
+                        .map(Into::<StoredHyperdeck>::into)
+                        .collect(),
+                )
+                .await;
+            }
             true
         }
     }

@@ -7,6 +7,7 @@ default-run = "hyperdeck-monitor"
 
 [dependencies]
 axum = { version = "0.6.10", features = ["macros", "ws"] }
+clap = { version = "4.6.1", features = ["derive"] }
 color-eyre = "0.6.3"
 futures = { version = "0.3.25" }
 futures-util = "0.3.30"
