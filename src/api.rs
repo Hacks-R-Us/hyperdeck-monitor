@@ -156,9 +156,6 @@ fn app(state: AppState) -> Router {
         .with_state(state)
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-pub struct WebSocketUpgradeRequest {}
-
 async fn get_index() -> Html<String> {
     Html(include_str!(env!("INCLUDE_PATH_INDEX")).to_string())
 }
