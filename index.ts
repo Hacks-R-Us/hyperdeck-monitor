@@ -1,6 +1,7 @@
 import { Hyperdeck, Commands } from 'hyperdeck-connection';
 import WebSocket, { WebSocketServer } from 'ws';
 import { v4 as uuidv4 } from 'uuid';
+import yargs from 'yargs';
 
 interface WrappedHyperdeck {
   ip: String,
@@ -25,7 +26,18 @@ type WebSocketMessage = {
   id: string
 }
 
-const wss = new WebSocketServer({ port: 7867 });
+const args = await yargs(process.argv.slice(2))
+  .usage('Usage: $0 [options]')
+  .alias('p', 'port')
+  .nargs('port', 1)
+  .describe('port', 'Port to serve websocket on')
+  .demandOption(['port'])
+  .help('h')
+  .alias('h', 'help')
+  .parse();
+
+const wss = new WebSocketServer({ port: args.port as number });
+console.log(`Serving on port ${args.port}`);
 
 const connected_clients: Map<string, WebSocket> = new Map();
 

@@ -5,6 +5,7 @@
     "compilerOptions": {
         "esModuleInterop": true,
         "moduleResolution": "bundler",
-        "module": "esnext"
+        "module": "esnext",
+        "target": "es2024"
     },
 }

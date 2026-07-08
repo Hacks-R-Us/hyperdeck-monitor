@@ -1,4 +1,9 @@
-use std::{collections::HashMap, process::Stdio, time::Duration};
+use std::{
+    collections::HashMap,
+    net::{Ipv4Addr, SocketAddr, SocketAddrV4},
+    process::Stdio,
+    time::Duration,
+};
 
 use api::message::{
     AddHyperdeckRequest, ClientRequest, HyperdeckConnectionState, HyperdeckMonitorState,
@@ -26,13 +31,26 @@ async fn main() {
     setup_logging().expect("Failed to setup logging");
     tracing::info!("Hello, world!");
 
+    let node_process_port: u16 = std::env::var("NODE_PROCESS_PORT")
+        .unwrap_or("7867".to_string())
+        .parse()
+        .unwrap();
+
     let cancel = CancellationToken::new();
-    let node_process = run_node_process(cancel.clone()).fuse();
+    let node_process = run_node_process(node_process_port, cancel.clone()).fuse();
 
     let (node_ws_message_tx, node_ws_message_rx) = tokio::sync::mpsc::unbounded_channel();
     let (node_commands_tx, node_commands_rx) = tokio::sync::mpsc::unbounded_channel();
-    let node_ws_communication =
-        talk_to_node_ws(node_ws_message_tx, node_commands_rx, cancel.clone()).fuse();
+    let node_ws_communication = talk_to_node_ws(
+        SocketAddr::V4(SocketAddrV4::new(
+            Ipv4Addr::new(127, 0, 0, 1),
+            node_process_port,
+        )),
+        node_ws_message_tx,
+        node_commands_rx,
+        cancel.clone(),
+    )
+    .fuse();
 
     let (state_tx, state_rx) = tokio::sync::broadcast::channel(1);
     let (client_request_tx, client_request_rx) = tokio::sync::mpsc::unbounded_channel();
@@ -193,17 +211,20 @@ async fn handle_message_from_client(
     }
 }
 
-async fn run_node_process(cancel: CancellationToken) {
+async fn run_node_process(port: u16, cancel: CancellationToken) {
     while !cancel.is_cancelled() {
         // Back-off in case we are immediately crashing in a loop.
         tokio::time::sleep(Duration::from_secs(1)).await;
 
         let result = tokio::process::Command::new("node")
             .arg("./index.js")
+            .arg("--port")
+            .arg(port.to_string())
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .spawn();
+
         match result {
             Ok(mut child_process) => {
                 let Some(raw_stdout) = child_process.stdout.take() else {
@@ -306,11 +327,12 @@ struct RemoveHyperdeckCommand {
 }
 
 async fn talk_to_node_ws(
+    node_process_address: SocketAddr,
     ws_message_tx: tokio::sync::mpsc::UnboundedSender<NodeWsMessageReceived>,
     commands_rx: tokio::sync::mpsc::UnboundedReceiver<NodeWsCommand>,
     cancel: CancellationToken,
 ) {
-    let ws_stream = wait_for_connection().await;
+    let ws_stream = wait_for_connection(node_process_address).await;
     let (write, read) = ws_stream.split();
 
     let outgoing = handle_outbound_messages(commands_rx, write).fuse();
@@ -326,12 +348,15 @@ async fn talk_to_node_ws(
     }
 }
 
-async fn wait_for_connection() -> WebSocketStream<MaybeTlsStream<TcpStream>> {
+async fn wait_for_connection(
+    node_process_address: SocketAddr,
+) -> WebSocketStream<MaybeTlsStream<TcpStream>> {
     loop {
         // Wait for Node to wake up...
         tokio::time::sleep(Duration::from_secs(1)).await;
 
-        let ws_url = url::Url::parse("ws://127.0.0.1:7867").expect("Invalid websocket URL");
+        let ws_url = url::Url::parse(&format!("ws://{node_process_address}"))
+            .expect("Invalid websocket URL");
         match tokio_tungstenite::connect_async(ws_url.clone()).await {
             Ok((ws_stream, _)) => {
                 tracing::info!("Connected to Node process on {ws_url}");
