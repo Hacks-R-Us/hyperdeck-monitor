@@ -32,6 +32,11 @@ async fn main() {
     setup_logging().expect("Failed to setup logging");
     tracing::info!("Hello, world!");
 
+    let api_port: u16 = std::env::var("API_PORT")
+        .unwrap_or("9681".to_string())
+        .parse()
+        .unwrap();
+
     let node_process_port: u16 = std::env::var("NODE_PROCESS_PORT")
         .unwrap_or("7867".to_string())
         .parse()
@@ -62,7 +67,7 @@ async fn main() {
 
     let (state_tx, state_rx) = tokio::sync::broadcast::channel(1);
     let (client_request_tx, client_request_rx) = tokio::sync::mpsc::unbounded_channel();
-    let api = api::initialize_api(state_rx, client_request_tx).fuse();
+    let api = api::initialize_api(api_port, state_rx, client_request_tx).fuse();
 
     let hyperdeck_monitor = run(
         node_commands_tx,

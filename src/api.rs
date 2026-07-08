@@ -45,6 +45,7 @@ pub struct Client {
 type Clients = Arc<Mutex<HashMap<Uuid, Client>>>;
 
 pub async fn initialize_api(
+    port: u16,
     mut state_rx: tokio::sync::broadcast::Receiver<HyperdeckMonitorState>,
     client_request_tx: tokio::sync::mpsc::UnboundedSender<ClientRequest>,
 ) {
@@ -81,7 +82,7 @@ pub async fn initialize_api(
         state,
         client_request_tx,
         clients,
-        port: 9681,
+        port,
     };
 
     let addr = SocketAddr::from((Ipv4Addr::UNSPECIFIED, app_state.port));
