@@ -10,7 +10,6 @@ use axum::{
     Router,
 };
 use message::{ClientRequest, HyperdeckMonitorState, ServerEvent};
-use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
     net::{Ipv4Addr, SocketAddr},
