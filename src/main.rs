@@ -2,6 +2,7 @@ use std::{
     collections::HashMap,
     net::{Ipv4Addr, SocketAddr, SocketAddrV4},
     process::Stdio,
+    sync::Arc,
     time::Duration,
 };
 
@@ -37,7 +38,13 @@ async fn main() {
         .unwrap();
 
     let cancel = CancellationToken::new();
-    let node_process = run_node_process(node_process_port, cancel.clone()).fuse();
+    let node_started_semaphore = Arc::new(tokio::sync::Semaphore::new(0));
+    let node_process = run_node_process(
+        node_process_port,
+        node_started_semaphore.clone(),
+        cancel.clone(),
+    )
+    .fuse();
 
     let (node_ws_message_tx, node_ws_message_rx) = tokio::sync::mpsc::unbounded_channel();
     let (node_commands_tx, node_commands_rx) = tokio::sync::mpsc::unbounded_channel();
@@ -46,6 +53,7 @@ async fn main() {
             Ipv4Addr::new(127, 0, 0, 1),
             node_process_port,
         )),
+        node_started_semaphore,
         node_ws_message_tx,
         node_commands_rx,
         cancel.clone(),
@@ -211,7 +219,12 @@ async fn handle_message_from_client(
     }
 }
 
-async fn run_node_process(port: u16, cancel: CancellationToken) {
+async fn run_node_process(
+    port: u16,
+    node_started_barrier: Arc<tokio::sync::Semaphore>,
+    cancel: CancellationToken,
+) {
+    let mut semaphore = Some(node_started_barrier);
     while !cancel.is_cancelled() {
         // Back-off in case we are immediately crashing in a loop.
         tokio::time::sleep(Duration::from_secs(1)).await;
@@ -254,6 +267,10 @@ async fn run_node_process(port: u16, cancel: CancellationToken) {
                                 tracing::error!("[NODE] {line}");
                             }
                         }
+                    }
+
+                    if let Some(semaphore) = semaphore.take() {
+                        semaphore.add_permits(1);
                     }
                 }
 
@@ -328,11 +345,12 @@ struct RemoveHyperdeckCommand {
 
 async fn talk_to_node_ws(
     node_process_address: SocketAddr,
+    node_started_semaphore: Arc<tokio::sync::Semaphore>,
     ws_message_tx: tokio::sync::mpsc::UnboundedSender<NodeWsMessageReceived>,
     commands_rx: tokio::sync::mpsc::UnboundedReceiver<NodeWsCommand>,
     cancel: CancellationToken,
 ) {
-    let ws_stream = wait_for_connection(node_process_address).await;
+    let ws_stream = wait_for_connection(node_process_address, node_started_semaphore).await;
     let (write, read) = ws_stream.split();
 
     let outgoing = handle_outbound_messages(commands_rx, write).fuse();
@@ -350,11 +368,11 @@ async fn talk_to_node_ws(
 
 async fn wait_for_connection(
     node_process_address: SocketAddr,
+    node_started_semaphore: Arc<tokio::sync::Semaphore>,
 ) -> WebSocketStream<MaybeTlsStream<TcpStream>> {
-    loop {
-        // Wait for Node to wake up...
-        tokio::time::sleep(Duration::from_secs(1)).await;
+    let _ = node_started_semaphore.acquire().await;
 
+    loop {
         let ws_url = url::Url::parse(&format!("ws://{node_process_address}"))
             .expect("Invalid websocket URL");
         match tokio_tungstenite::connect_async(ws_url.clone()).await {
