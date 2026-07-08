@@ -10,6 +10,7 @@ fn main() {
     println!("cargo:rerun-if-changed=package-lock.json");
     println!("cargo:rerun-if-changed=index.ts");
     println!("cargo:rerun-if-changed=./frontend");
+    println!("cargo:rerun-if-changed=./src/api/message.rs");
 
     let npm_install_output = Command::new("npm")
         .arg("install")
