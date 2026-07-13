@@ -1,0 +1,8 @@
+Package: hyperdeck-monitor
+Version: 1.0-1
+Section: base
+Priority: optional
+Architecture: amd64
+Depends: nodejs, npm
+Description: Package to install monitoring app for Hyperdeck hardware.
+Maintainer: "EMF VOC"

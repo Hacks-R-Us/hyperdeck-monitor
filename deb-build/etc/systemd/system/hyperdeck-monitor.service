@@ -1,0 +1,12 @@
+[Unit]
+Description=Hyperdeck monitoring software
+After=network.target
+
+[Service]
+Type=simple
+Restart=always
+RestartSec=1
+ExecStart=/usr/bin/hyperdeck-monitor --hyperdecks-file /var/opt/hyperdeck-monitor/hyperdecks.json
+
+[Install]
+WantedBy=multi-user.target

@@ -30,6 +30,8 @@
           trunk
           typos
           trunk
+
+          dpkg
         ];
         buildInputs = with pkgs; [
           rustToolchain

@@ -60,9 +60,13 @@ async fn main() {
         .parse()
         .unwrap();
 
+    let node_process_entry_file =
+        PathBuf::from(option_env!("NODE_PROCESS_PATH").unwrap_or("./index.js"));
+
     let cancel = CancellationToken::new();
     let node_started_semaphore = Arc::new(tokio::sync::Semaphore::new(0));
     let node_process = run_node_process(
+        &node_process_entry_file,
         node_process_port,
         node_started_semaphore.clone(),
         cancel.clone(),
@@ -278,6 +282,7 @@ async fn handle_message_from_client(
 }
 
 async fn run_node_process(
+    entry_file: &std::path::Path,
     port: u16,
     node_started_barrier: Arc<tokio::sync::Semaphore>,
     cancel: CancellationToken,
@@ -288,7 +293,7 @@ async fn run_node_process(
         tokio::time::sleep(Duration::from_secs(1)).await;
 
         let result = tokio::process::Command::new("node")
-            .arg("./index.js")
+            .arg(entry_file)
             .arg("--port")
             .arg(port.to_string())
             .stdin(Stdio::piped())
@@ -442,6 +447,9 @@ async fn wait_for_connection(
                 tracing::error!("Error connecting to Node process: {:?}", err)
             }
         }
+
+        // Backoff.
+        tokio::time::sleep(Duration::from_millis(100)).await;
     }
 }
 

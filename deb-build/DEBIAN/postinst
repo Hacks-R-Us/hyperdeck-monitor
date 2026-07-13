@@ -1,0 +1,7 @@
+#!/usr/bin/env sh
+
+mkdir -p /var/opt/hyperdeck-monitor/
+
+systemctl daemon-reload
+systemctl enable hyperdeck-monitor.service
+systemctl restart hyperdeck-monitor.service
