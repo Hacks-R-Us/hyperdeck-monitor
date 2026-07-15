@@ -203,12 +203,13 @@ async fn handle_message_from_node(
             remaining,
         } => {
             if let Some(hyperdeck) = state.hyperdecks.get_mut(&hyperdeck_id) {
-                let entry = hyperdeck
-                    .slots
-                    .entry(slot_id)
-                    .or_insert(HyperdeckRecordBay {
-                        recording_time_remaining: remaining,
-                    });
+                let entry =
+                    hyperdeck
+                        .slots
+                        .entry(slot_id.to_string())
+                        .or_insert(HyperdeckRecordBay {
+                            recording_time_remaining: remaining,
+                        });
                 entry.recording_time_remaining = remaining;
                 true
             } else {

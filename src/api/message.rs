@@ -42,7 +42,7 @@ pub struct HyperdeckState {
     pub connection_state: HyperdeckConnectionState,
     pub recording_status: RecordingState,
     // HashMap to allow for sparse entries.
-    pub slots: HashMap<usize, HyperdeckRecordBay>,
+    pub slots: HashMap<String, HyperdeckRecordBay>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

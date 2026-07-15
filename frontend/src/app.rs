@@ -116,8 +116,8 @@ impl eframe::App for HyperdeckMonitorApp {
         if let Some(ewebsock::WsEvent::Message(ewebsock::WsMessage::Text(event))) =
             self.ws_receiver.try_recv()
         {
-            if let Ok(received) = serde_json::from_str::<ServerEvent>(&event) {
-                match received {
+            match serde_json::from_str::<ServerEvent>(&event) {
+                Ok(received) => match received {
                     ServerEvent::HyperdeckMonitorState(state) => {
                         self.hyperdecks = Default::default();
                         for (id, hyperdeck) in state.hyperdecks {
@@ -127,11 +127,23 @@ impl eframe::App for HyperdeckMonitorApp {
                                 ip: hyperdeck.ip.parse().unwrap(),
                                 status: hyperdeck.connection_state.into(),
                                 recording_status: hyperdeck.recording_status,
-                                slots: hyperdeck.slots,
+                                slots: hyperdeck
+                                    .slots
+                                    .into_iter()
+                                    .map(|(slot_id, contents)| {
+                                        (
+                                            slot_id.parse::<usize>().expect("Invalid slot ID"),
+                                            contents,
+                                        )
+                                    })
+                                    .collect(),
                             });
                             self.hyperdecks.sort_by(|a, b| a.name.cmp(&b.name));
                         }
                     }
+                },
+                Err(err) => {
+                    log::error!("Error deserializing message: {err:?}");
                 }
             }
         }
@@ -240,11 +252,7 @@ fn hyperdeck_list(
                                 Stroke::NONE,
                             );
                             let recording_text: RichText = "[Recording]".into();
-                            ui.label(
-                                recording_text
-                                    .color(Color32::from_rgb(255, 255, 255))
-                                    .strong(),
-                            );
+                            ui.label(recording_text.color(Color32::from_rgb(255, 0, 0)).strong());
                         }
                         RecordingState::NotRecording => {
                             ui.label("[Not Recording]");
@@ -252,7 +260,10 @@ fn hyperdeck_list(
                     };
                 });
 
-                for (index, slot) in hyperdeck.slots.iter() {
+                let mut slots: Vec<(usize, HyperdeckRecordBay)> =
+                    hyperdeck.slots.clone().into_iter().collect();
+                slots.sort_by(|a, b| a.0.cmp(&b.0));
+                for (index, slot) in slots.iter() {
                     ui.horizontal(|ui| {
                         let slot_label: RichText = format!("Slot {}", index + 1).into();
                         ui.label(slot_label.strong());
