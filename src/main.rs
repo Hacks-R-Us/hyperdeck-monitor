@@ -164,10 +164,10 @@ async fn handle_message_from_node(
     _node_commands_tx: &mut tokio::sync::mpsc::UnboundedSender<NodeWsCommand>,
     state: &mut HyperdeckMonitorState,
 ) -> bool {
-    tracing::info!("{:?}", msg);
+    tracing::debug!("{:?}", msg);
     match msg {
         NodeWsMessageReceived::Log { message } => {
-            tracing::info!("[NODE] {message}");
+            tracing::debug!("[NODE] {message}");
             false
         }
         NodeWsMessageReceived::HyperdeckConnected { id } => {
@@ -322,7 +322,7 @@ async fn run_node_process(
                     select! {
                         line = stdout.next().fuse() =>  {
                             if let Some(line) = line {
-                                tracing::info!("[NODE] {line}");
+                                tracing::debug!("[NODE] {line}");
                             }
                         }
                         line = stderr.next().fuse() =>  {
@@ -495,7 +495,7 @@ fn setup_logging() -> Result<(), Report> {
     color_eyre::install()?;
 
     if std::env::var("RUST_LOG").is_err() {
-        std::env::set_var("RUST_LOG", "debug");
+        std::env::set_var("RUST_LOG", "info");
     }
     tracing_subscriber::fmt::fmt()
         .with_env_filter(EnvFilter::from_default_env())
