@@ -10,7 +10,8 @@ use wasm_timer::Instant;
 
 use crate::websocket::{
     AddHyperdeckRequest, ClientRequest, HyperdeckConnectionState, HyperdeckRecordBay,
-    RecordingState, RemoveHyperdeckRequest, ServerEvent,
+    RecordingState, RemoveHyperdeckRequest, ServerEvent, StartRecordingRequest,
+    StopRecordingRequest,
 };
 
 pub struct HyperdeckMonitorApp {
@@ -236,6 +237,26 @@ fn hyperdeck_list(
                             id: hyperdeck.id.clone(),
                         },
                     ));
+                }
+                match hyperdeck.recording_status {
+                    RecordingState::Recording => {
+                        if ui.button("Stop Recording").clicked() {
+                            message_queue.push_back(ClientRequest::StopRecording(
+                                StopRecordingRequest {
+                                    id: hyperdeck.id.clone(),
+                                },
+                            ));
+                        }
+                    }
+                    RecordingState::NotRecording => {
+                        if ui.button("Start Recording").clicked() {
+                            message_queue.push_back(ClientRequest::StartRecording(
+                                StartRecordingRequest {
+                                    id: hyperdeck.id.clone(),
+                                },
+                            ));
+                        }
+                    }
                 }
             });
             if matches!(hyperdeck.status, HyperdeckStatus::Connected) {

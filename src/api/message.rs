@@ -8,6 +8,8 @@ use serde::{Deserialize, Serialize};
 pub enum ClientRequest {
     AddHyperdeck(AddHyperdeckRequest),
     RemoveHyperdeck(RemoveHyperdeckRequest),
+    StartRecording(StartRecordingRequest),
+    StopRecording(StopRecordingRequest),
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -19,6 +21,16 @@ pub struct AddHyperdeckRequest {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct RemoveHyperdeckRequest {
+    pub id: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct StartRecordingRequest {
+    pub id: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct StopRecordingRequest {
     pub id: String,
 }
 

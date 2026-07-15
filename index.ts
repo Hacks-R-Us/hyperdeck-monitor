@@ -13,7 +13,9 @@ const hyperdecks: Map<string, WrappedHyperdeck> = new Map()
 
 enum WebSocketMessageType {
   AddHyperdeck = "add_hyperdeck",
-  RemoveHyperdeck = "remove_hyperdeck"
+  RemoveHyperdeck = "remove_hyperdeck",
+  StartRecording = "start_recording",
+  StopRecording = "stop_recording"
 }
 
 type WebSocketMessage = {
@@ -23,6 +25,12 @@ type WebSocketMessage = {
   port: number
 } | {
   type: WebSocketMessageType.RemoveHyperdeck,
+  id: string
+} | {
+  type: WebSocketMessageType.StartRecording,
+  id: string
+} | {
+  type: WebSocketMessageType.StopRecording,
   id: string
 }
 
@@ -185,7 +193,7 @@ function handle_message(message: Partial<WebSocketMessage>) {
       newHyperdeck.connect(message.ip, message.port)
 
       break;
-    case WebSocketMessageType.RemoveHyperdeck:
+    case WebSocketMessageType.RemoveHyperdeck: {
       if (message.id === undefined) return;
 
       console.log("Removing hyperdeck");
@@ -197,6 +205,29 @@ function handle_message(message: Partial<WebSocketMessage>) {
       hyperdecks.delete(message.id)
 
       break;
+    }
+    case WebSocketMessageType.StartRecording: {
+      if (message.id === undefined) return;
+
+      console.log("Starting recording");
+
+      let hyperdeck = hyperdecks.get(message.id)
+      if (hyperdeck === undefined) return;
+
+      hyperdeck.hyperdeck.sendCommand(new Commands.RecordCommand());
+      break;
+    }
+    case WebSocketMessageType.StopRecording: {
+      if (message.id === undefined) return;
+
+      console.log("Starting recording");
+
+      let hyperdeck = hyperdecks.get(message.id)
+      if (hyperdeck === undefined) return;
+
+      hyperdeck.hyperdeck.sendCommand(new Commands.StopCommand());
+      break;
+    }
     default:
       exhaustiveMatch(messageType)
   }

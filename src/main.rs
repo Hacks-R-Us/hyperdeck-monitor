@@ -27,7 +27,10 @@ use tokio_util::{
 };
 use tracing_subscriber::EnvFilter;
 
-use crate::storage::{load_hyperdecks_file, write_hyperdecks_to_file, StoredHyperdeck};
+use crate::{
+    api::message::{ClientRequest::StartRecording, StartRecordingRequest, StopRecordingRequest},
+    storage::{load_hyperdecks_file, write_hyperdecks_to_file, StoredHyperdeck},
+};
 
 mod api;
 mod storage;
@@ -279,6 +282,22 @@ async fn handle_message_from_client(
             }
             true
         }
+        ClientRequest::StartRecording(StartRecordingRequest { id }) => {
+            if let Some(hyperdeck) = state.hyperdecks.get(&id) {
+                let _ = node_commands_tx
+                    .send(NodeWsCommand::StartRecording(StartRecordingCommand { id }));
+            }
+
+            true
+        }
+        ClientRequest::StopRecording(StopRecordingRequest { id }) => {
+            if let Some(hyperdeck) = state.hyperdecks.get(&id) {
+                let _ = node_commands_tx
+                    .send(NodeWsCommand::StopRecording(StopRecordingCommand { id }));
+            }
+
+            true
+        }
     }
 }
 
@@ -354,6 +373,10 @@ enum NodeWsCommand {
     AddHyperdeck(AddHyperdeckCommand),
     #[serde(rename = "remove_hyperdeck")]
     RemoveHyperdeck(RemoveHyperdeckCommand),
+    #[serde(rename = "start_recording")]
+    StartRecording(StartRecordingCommand),
+    #[serde(rename = "stop_recording")]
+    StopRecording(StopRecordingCommand),
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -404,6 +427,18 @@ struct AddHyperdeckCommand {
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct RemoveHyperdeckCommand {
+    id: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct StartRecordingCommand {
+    id: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct StopRecordingCommand {
     id: String,
 }
 
